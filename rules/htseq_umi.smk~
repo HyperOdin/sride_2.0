@@ -1,0 +1,171 @@
+rule bowtie_mapping:
+    input:
+        sample="reads/trimmed/{sample}-R1-trimmed.fq",
+        index_ready="bowtie_index_ready",
+        fa=resolve_single_filepath(*references_abs_path(ref='references'), config.get("genome_fasta"))
+    output:
+        bam="reads/aligned/{sample}.bam",
+	fastq="results/{sample}/fastq/{sample}_mirna_unmapped.fastq.gz",
+    params:
+         params=config.get("rules").get("bowtie_mapping").get("params"),
+         basename=config.get("rules").get("bowtie_mapping").get("basename")
+    threads: pipeline_cpu_count()
+    conda:
+        "../envs/bowtie2.yaml"
+    shell:
+        "bowtie2 "
+        "{params.params} "
+        "{params.basename} "
+        "--un-gz {output.fastq} "
+	"{input.sample} "
+	"| samtools view "
+        "-bT "
+        "{input.fa} - "
+        "| samtools sort - "
+        "-o {output.bam}"  
+
+rule index:
+    input:
+        "reads/aligned/{sample}.bam"
+    output:
+        "reads/aligned/{sample}.bam.bai"
+    conda:
+        "../envs/samtools.yaml"
+    shell:
+        "samtools index "
+        "{input}"
+
+
+rule pirna_mapping:
+    input:
+        sample="results/{sample}/fastq/{sample}_mirna_unmapped.fastq.gz",
+        index_ready="pirna_index_ready",
+        fa=resolve_single_filepath(*references_abs_path(ref='pirna_reference'), config.get("pirna_fasta"))
+    output:
+        bam="reads/pirna/{sample}_pirna.bam",
+    params:
+         params=config.get("rules").get("pirna_mapping").get("params"),
+         basename=config.get("rules").get("pirna_mapping").get("basename")
+    threads: pipeline_cpu_count()
+    conda:
+        "../envs/bowtie2.yaml"
+    shell:
+        "bowtie2 "
+        "{params.params} "
+        "{params.basename} "
+        "{input.sample} "
+        "| samtools view "
+        "-bT "
+        "{input.fa} - "
+        "| samtools sort - "
+        "-o {output.bam}"
+
+
+rule pirna_index:
+    input:
+        "reads/pirna/{sample}_pirna.bam"
+    output:
+        "reads/pirna/{sample}_pirna.bam.bai"
+    conda:
+        "../envs/samtools.yaml"
+    shell:
+        "samtools index "
+        "{input}"
+
+
+rule pirna_dedup:
+    input:
+        bam="reads/pirna/{sample}_pirna.bam",
+        bai="reads/pirna/{sample}_pirna.bam.bai"
+    output:
+        bam="reads/dedupirna/{sample}_pirna.bam",
+    conda:
+        "../envs/umi_tools.yaml"
+    shell:
+       "umi_tools dedup "
+       "-I {input.bam} "
+       "-S {output.bam} "
+       "--method=unique "
+
+
+rule pirna_dedup_index:
+    input:
+        "reads/dedupirna/{sample}_pirna.bam"
+    output:
+        "reads/dedupirna/{sample}_pirna.bam.bai"
+    conda:
+        "../envs/samtools.yaml"
+    shell:
+        "samtools index "
+        "{input} {output}"
+
+
+rule count_raw_read_counts:
+    input:
+        bam="reads/pirna/{sample}_pirna.bam",
+        bai="reads/pirna/{sample}_pirna.bam.bai"
+    output:
+        counts="results/{sample}_counts.tsv"
+    conda:
+        "../envs/samtools.yaml"
+    params:
+        header="Molecule\tCount"
+    shell:
+        "samtools idxstats {input.bam} | awk 'BEGIN{{OFS='\\t'}} $3 != 0' - | cut -f1,3 -| sed '1 i\{params.header}' - > {output.counts}"
+
+
+
+rule pirna_deduplicated_read_counts:
+    input:
+        bam="reads/dedupirna/{sample}_pirna.bam",
+        bai="reads/dedupirna/{sample}_pirna.bam.bai"
+    output:
+        counts="results/{sample}_counts_dedup.tsv"
+    conda:
+        "../envs/samtools.yaml"
+    shell:
+        "samtools idxstats {input.bam} | awk 'BEGIN{{OFS='\\t'}} $3 != 0' - | cut -f1,3 -| sed '1 i\Molecule\tCount#' - > {output.counts}"
+
+
+rule merge_deduplicated_read_counts:
+    input:
+        expand("results/{sample.sample}_counts_dedup.tsv", sample=samples.reset_index().itertuples()),
+    output:
+        "results/counts_deduplicated.tsv"
+    script:
+        "scripts/merge_read_counts.py"
+
+
+rule umi_dedup:
+    input:
+       bam="reads/aligned/{sample}.bam",
+       bai="reads/aligned/{sample}.bam.bai"
+    output:
+        "reads/dedup/{sample}.bam"
+    conda:
+        "../envs/umi_tools.yaml"
+    shell:
+        "umi_tools dedup "
+        "-I {input.bam} "
+        "-S {output} "
+        "--method=unique"
+
+rule htseq:
+    input:
+        bam="reads/dedup/{sample}.bam",
+        gff=config.get("htseq_gff")
+    output:
+        counts="htseq/{sample}.counts"
+    conda:
+        "../envs/htseq.yaml"
+    shell:
+        "htseq-count "
+        "-f bam "
+        "-r pos "
+        "-t miRNA "
+        "-i Name "
+        "-q {input.bam} "
+        "{input.gff} "
+        ">{output.counts}"
+
+

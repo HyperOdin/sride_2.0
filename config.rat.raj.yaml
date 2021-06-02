@@ -1,0 +1,57 @@
+references:
+    basepath: "/ELS/els9/users/biosciences/references"
+    provider: "ucsc"
+    release: "rn6"
+
+genome_fasta: "ucsc.rn6.fasta"
+
+
+pirna_reference:
+    basepath: "/u/rajeshpal93/scratch/t3mir/bowtie2"
+    provider: "pirbase"
+    release: "v2"
+pirna_fasta: "rno.fa"
+
+
+mirna_ref: "../data_rat/ref/miRNA/miRBase_main_mature.fasta"
+mirna_ref_precursors: "../data_rat/ref/miRNA/miRBase_main_precursors.fasta"
+mirna_other: "../data_rat/ref/miRNA/miRBase_other_mature.fasta"
+
+##TODO: how to download and prepare this file
+htseq_gff: "../data_rat/ref/mirbase/rno.gff3"
+
+
+rules:
+    trim_galore_se:
+        params: "--small_rna --dont_gzip"
+    multiqc:
+        arguments: "--force "
+    mirdeep2_alignment:
+        params: "-e -h -j -l 18 -m -v"
+    mirdeep2_identification:
+        params: "-t rno -P -b 0 -v"
+    fastq_screen:
+        params: "../data_rat/fastq_screen.config"
+    bowtie_mapping:
+        params: "-k 100 --end-to-end --very-sensitive -x"
+        basename: "ucsc_rn6 "
+    mir_trace:
+        params: "-s rno"
+    htseq:
+        params: "-f bam -r pos -t miRNA -i Name"
+    pirna_mapping:
+        basename: "pirbase_v2 "
+        params: "-k 100 --end-to-end --very-sensitive -x"
+
+
+wrappers:
+    fastqc: "file:/ELS/els9/users/biosciences/references/snakemake-wrappers/bio/fastqc"
+    trim_galore_se: "file:/ELS/els9/users/biosciences/references/snakemake-wrappers/bio/trim_galore/se"
+
+
+
+samples: /ELS/els9/users/biosciences/projects/sride_columbano/samples.raj.tsv
+units: /ELS/els9/users/biosciences/projects/sride_columbano/units.raj.tsv
+reheader: /ELS/els9/users/biosciences/projects/sride_columbano/reheader.tsv
+internal_sid: "LIMS"
+umi: "yes"

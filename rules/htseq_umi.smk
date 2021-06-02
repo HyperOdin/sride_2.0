@@ -133,7 +133,7 @@ rule merge_deduplicated_read_counts:
     output:
         "results/counts_deduplicated.tsv"
     script:
-        "scripts/merge_read_counts.py"
+        "scripts/merge_reads_counts.py"
 
 
 rule umi_dedup:

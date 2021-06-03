@@ -1,0 +1,34 @@
+                                                         ##DESEQ from counts data #####
+library("genefilter")
+library("pheatmap")
+library("DESeq2") ##
+library("gplots")
+library("RColorBrewer")
+library("Nozzle.R1")
+library("xlsx")
+library("dplyr")
+library("ggplot2")                                                         
+                                                         
+                                                         
+##Read the counts file and substitute the row numbers with names of the small RNA's which is present in 1st column
+countdata = read.table("/Users/rajpa/counts_deduplicated.tsv", header=T, sep="\t", as.is = T)
+result <-countdata[-1]
+row.names(result) <- countdata$Molecule
+result
+
+##Load the metadata/Conditions 
+sample_list <- read.table("/Users/rajpa/reheader_miRNA.tsv", header=T, sep="\t", as.is=T)
+
+##repalce the samples names with client names
+lab_names = colnames(result)
+names(lab_names) <- sample_list$Client[match(lab_names, sample_list$LIMS)]
+
+colnames(result) <- gsub(".R001","",names(lab_names))
+
+# Run DeSeq2
+sampleTable <- data.frame(condition = sample_list$group[match(names(lab_names), sample_list$Client)])
+rownames(sampleTable) <- colnames(result)
+
+# Measure impact of condition
+dds <- DESeqDataSetFromMatrix(result, sampleTable, ~ condition)
+dds <- DESeq(dds)
